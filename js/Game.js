@@ -1,5 +1,4 @@
-﻿/// <reference path="architecture.js" />
-
+﻿
 // Variáveis globais
 var canvas;// = document.getElementById('canvasGame');
 var ctx; // = canvas.getContext('2d');
@@ -77,7 +76,6 @@ function Game() {
         if (e.layerY > nest.GetPosition().Y && e.layerY < nest.GetPosition().Y + nest.NestSize.Height) {
             IsHolding = true;
             IsHoldingStartAltitude = GetAltitudeByRealY(e.layerY);
-            //ChangeCameraPosition(CameraAltitudeVirtual + 10, true);
         }
     }, false);
 
@@ -103,10 +101,7 @@ function Game() {
     setInterval(function () {
         fpsValue = Math.round(1000 / (1000 * deltaTime)) + " fps";
 
-
     }, 500);
-
-    
     
 }
 
@@ -155,11 +150,6 @@ function draw() {
     ctx.fillStyle = "black";
     ctx.fillRect(gameDashboardPosition.X, gameDashboardPosition.Y, gameDashboardSize.Width, gameDashboardSize.Height);
 
-//    ctx.restore();
-//    ctx.fillStyle = "black";
-//    ctx.fillRect(gameDashboarMarginSide, 100, 50, 50);
-//    ctx.save();
-
     ctx.restore();
     nest.draw(ctx, 0);
     egg.draw(ctx,0);
@@ -173,35 +163,23 @@ function draw() {
 }
 
 function GetAltitudeY(_altitude) {
-    /// <summary>Converte a altitude real do objeto a partir da camera.</summary>
-    /// <returns type="Number">Valor real da altura.</returns>
     var currentConvertedCameraAltitude = CameraAltitudeReal * canvas.height / 100;
     var currentConvertedObjectAltitude = _altitude * canvas.height / 100;
     return currentConvertedCameraAltitude - currentConvertedObjectAltitude;
 }
 
 function GetLatitude(_latitude) {
-    /// <summary>Converte a altitude real do objeto a partir da camera.</summary>
-    /// <returns type="Number">Valor da latitude de 0 a 100.</returns>
     return gameDashboardPosition.X + (_latitude *(gameDashboardSize.Width / 100));
 }
 
 function GetAltitudeByRealY(_altitude) {
-    /// <summary>Converte a altitude real do objeto a partir da camera.</summary>
-    /// <returns type="Number">Valor real da altura.</returns>
-    //var currentConvertedCameraAltitude = CameraAltitudeReal * 100 / canvas.height;
     var currentConvertedObjectAltitude = _altitude * 100 / canvas.height;
-    //return currentConvertedCameraAltitude - currentConvertedObjectAltitude;
 
     return (CameraAltitudeVirtual - currentConvertedObjectAltitude) + 100;
 }
 
 
 function ChangeCameraPosition(_newAltitude, animation) {
-    /// <summary>Função feita para mudar a posição da camera. Algo de nota é que a camera por padrao é posicionada no meio da tela.</summary>
-    /// <param name="_newAltitude" type="Number">Nova altura que vai ficar a altitude.</param>
-    /// <param name="_newAltitude" type="Bool">Se deve ter animação ou não.</param>
-    
 
     if (animation)
         newCameraAltitude = _newAltitude + 100; // Por ficar no meio da tela, vem do +50.
@@ -354,7 +332,6 @@ function Nest(_altitude, _latitude, _altitudeSpeed, _latitudeSpeed, _kind, _marg
 
         this.Altitude = realAltitude + plusAltitude;
 
-        //position.Y =  // O mais 12 é para que a base de altitute do ninho seja bem abaixo dela
         var _x = this.Position.X + CameraSpecialPosition.X;
         var _y = GetAltitudeY(this.Altitude) + CameraSpecialPosition.Y;
         realPosition = new Vector2(_x, _y);
@@ -432,31 +409,23 @@ function CollisionDetect(orignX, orignY, orignHeight, orignWidth,
 }
 
 function StartFPS() {
-    /// <summary>Inicia a contagem de FPS.</summary>
-    /// <param name="radius" type="Number">The radius of the circle.</param>
-    /// <returns type="Number">Returns a number that represents the area.</returns>
-
     window.setInterval(update, 1000 / fpsStandard);
 }
 
 function Vector2(_x,_y) {
-    /// <summary>Posição X e Y.</summary>
     this.X = _x;
     this.Y = _y;
 }
 
 function Size(_width,_height) {
-    /// <summary>Posição X e Y.</summary>
     this.Width = _width;
     this.Height = _height;
 }
 
 function GetResolutionHeight(_height) {
-    /// <summary>Retorna um valor de altura a partir de um valor padrao de altura. O 1000 é como se fosse a lente.</summary>
     return (_height / 1000) * canvas.height;
 }
 
 function GetResolutionWidth(_width, _oldHeight, _newHeight) {
-    /// <summary>Retorna o valor de largura a partir do valor de altura. Ele mantem a resolução da imagem.</summary>
     return (_newHeight / _oldHeight) * _width;
 }
