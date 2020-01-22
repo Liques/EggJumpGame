@@ -1,34 +1,42 @@
 ﻿
-window.addEventListener("resize", resize);
+document.addEventListener("DOMContentLoaded", function () {
+    
+    window.addEventListener("resize", resize);
+
+}, false);
+
+function onViewStateChanged() {
+    var viewStates = Windows.UI.ViewManagement.ApplicationViewState;
+    var newViewState = Windows.UI.ViewManagement.ApplicationView.value;
+
+    if (newViewState === viewStates.snapped) {
+        isPaused = true;
+        isSnnaped = true;
+
+    } else {
+        isSnnaped = false;
+    }
+
+}
 
 document.addEventListener("DOMContentLoaded", function (event) {
     Game();
 });
 
-
-var canvas;// = document.getElementById('canvasGame');
-var ctx; // = canvas.getContext('2d');
+var canvas;
+var ctx; 
 var attemptFPS = 0;
 var loaded = 0;
 
 var deepControl = new DeepControl();
 
-var CameraAltitudeReal = 0; // A altitude real da camera fica na verdade bem no topo do jogo... OBS.: Use o ChangePositon para mudar a posição
-var CameraAltitudeVirtual = 0; // ... por isso a necessidade do virtual que fica no chão. OBS.: Use o ChangePositon para mudar a posição
-var newCameraAltitude = 0; // OBS.: Use o ChangePositon para mudar a posição
-var CameraSpecialPosition = new Vector2(0, 0);
-var isCameraAnimating = 0;
-var firstAltitude = 0;
-
-var gameDashboardPosition = new Vector2(0, 0);
-var gameDashboardSize = new Size(0, 0);
-var gameDashboarMarginSide;
-
 var IsHolding = false;
 var IsHoldingStartAltitude = 0;
 var IsHoldingCurrentAltitude = 0;
+var IsHoldingStartLatitude = 0;
+var IsHoldingCurrentLatitude = 0;
 
-var nextAltitude = 31; // altitude do primeiro nest
+var nextAltitude = 31;
 
 var listLandingPlaces = new Array();
 
@@ -36,7 +44,12 @@ var _storeNest1 = new Nest(0, 0); // Nest que vai guardar algumas imagens e prop
 
 var forceResize = false;
 
+//var soundBump = new Audio("sounds/bump.wav");
+var nestLanding = new Audio("sounds/land.wav");
+var stretchSound = new Audio("sounds/stretch.wav");
+
 var egg = new Egg();
+egg.soundBump = new Audio("sounds/bump.wav");
 var eggDefault = new Egg();
 
 var currentScreen = 0;// 0 = Menu, 1 Gameplay, 3 Final Screen
@@ -47,15 +60,15 @@ var gameOverScreen = new GameoverScreen();
 var isPaused = false;
 var isPausedOpacity = 0;
 
-var userPoints = 0;
 var userPointsScreen = 0; // Valor que é mostrado na tela
 var isSnnaped = false;
 
 var fromSuspend = false; // se entrar no estado durmant...
 
-var soundBump = new Audio("sounds/bump.wav");
-var nestLanding = new Audio("sounds/land.wav");
-var stretchSound = new Audio("sounds/stretch.wav");
+var directionDots;
+var userInfo = new UserInfo();
+var wind;
+var flakeControl;
 
 function Game() {
 
@@ -72,17 +85,22 @@ function Game() {
         tempMenuLogoImage = new Image(),
         tempTbPlay = new Image(),
         tempBtPlayImage = new Image(),
-        tempBrokenEggImage = new Image();
+        tempBrokenEggImage = new Image(),
+        tempoPonto = new Image();
 
     var loader = new PxLoader(),
         tempImgRoof = loader.addImage('images/fundomata.jpg'),
         tempImgNestNormalFront = loader.addImage('images/nestFrontFull.png'),
         tempImgNestNormalBack = loader.addImage('images/nestBackFull.png'),
-        tempImgEgg = loader.addImage('images/eggFull2.png'),
+        tempImgEgg = loader.addImage('images/eggFull.png'),
         tempMenuLogoImage = loader.addImage('images/logoFinal.png'),
         tempTbPlay = loader.addImage('images/btPlay.png'),
         tempBtPlayImage = loader.addImage('images/btPlayAgain.png'),
-        tempBrokenEggImage = loader.addImage('images/ovoQuebrado.png');
+        tempBrokenEggImage = loader.addImage('images/ovoQuebrado.png'),
+        tempPonto = loader.addImage('images/ponto.png');
+
+    wind = new Wind(gameDashboardPosition, gameDashboardSize);
+    flakeControl = new FlakeControl(gameDashboardPosition, gameDashboardSize, wind);
 
     loader.addCompletionListener(function () {
 
@@ -108,15 +126,18 @@ function Game() {
         eggDefault.ImgEgg = tempImgEgg;
         eggDefault.Size = new Size(eggDefault.ImgEgg.width, eggDefault.ImgEgg.height);
 
+        directionDots = new DirectionDots(tempPonto, wind);
+
+        // deixe por ultimo
         forceResize = true;
 
-        // suspend
+        // suspend:
         if (fromSuspend) {
 
             var applicationData = Windows.Storage.ApplicationData.current;
 
-            userPoints = applicationData.localSettings.values["userPoints"];
-            userPointsScreen = userPoints;
+            userInfo.Points = applicationData.localSettings.values["userPoints"];
+            userPointsScreen = userInfo.Points;
 
             egg = new Egg();
             listLandingPlaces = new Array();
@@ -135,13 +156,15 @@ function Game() {
                     break;
 
                 case 1: // gameplay
+                    //continueGame(listLandingPlacesRescued[0].Place.Altitude, listLandingPlacesRescued[listLandingPlacesRescued.length - 1].Place.Altitude);
+
                     currentScreen = 1;
                     var eggRescued = JSON.parse(applicationData.localSettings.values["egg"]);
                     egg.Altitude = eggRescued.Altitude;
                     egg.Latitude = eggRescued.Latitude;
 
                     for (var i = 0; i < listLandingPlacesRescued.length; i++) {
-                        listLandingPlaces[i] = new LandingPlace(1, listLandingPlacesRescued[i].Place.Altitude, listLandingPlacesRescued[i].Place.Latitude, 0, listLandingPlacesRescued[i].Place.LatitudeSpeed, listLandingPlacesRescued[i].Place.CurrentDirection);
+                        listLandingPlaces[i] = new LandingPlace(egg, 1, listLandingPlacesRescued[i].Place.Altitude, listLandingPlacesRescued[i].Place.Latitude, 0, listLandingPlacesRescued[i].Place.LatitudeSpeed, listLandingPlacesRescued[i].Place.CurrentDirection, nestLanding, stretchSound);
                         listLandingPlaces[i].Place.ImgNestFront = _storeNest1.ImgNestFront;
                         listLandingPlaces[i].Place.ImgNestBack = _storeNest1.ImgNestBack;
 
@@ -162,6 +185,10 @@ function Game() {
 
                     menuScreen.showMenu = false;
 
+                    wind.Speed = applicationData.localSettings.values["wind"];
+                    wind.RealSpeed = wind.Speed;
+
+
                     ChangeCameraPosition(egg.CurrentLandingPlace.Place.Altitude - 26, false);
 
 
@@ -173,7 +200,7 @@ function Game() {
                     if (gameOverScreen.highestPoints == undefined)
                         gameOverScreen.highestPoints = 0;
 
-                    gameOverScreen.points = userPoints;
+                    gameOverScreen.points = userInfo.Points;
 
                     menuScreen.showMenu = false;
                     gameOverScreen.show();
@@ -183,43 +210,62 @@ function Game() {
 
                     break;
             }
+
+
         }
 
     });
 
-    canvas.addEventListener('mousedown', function (e) {
+    canvas.addEventListener('mousedown', mousedown, false);
+
+    function mousedown(e){
         if (currentScreen == 1) {
             if (e.layerY > egg.CurrentLandingPlace.Place.Position.Y && e.layerY < egg.CurrentLandingPlace.Place.Position.Y + egg.CurrentLandingPlace.Place.Size.Height) {
                 IsHolding = true;
                 IsHoldingStartAltitude = GetAltitudeByRealY(e.layerY);
+                IsHoldingCurrentLatitude = e.layerX;
+                directionDots.start(egg.CurrentLandingPlace.Place.Altitude, egg.CurrentLandingPlace);
             }
         }
-    }, false);
+    }
 
-    canvas.addEventListener('mousemove', function (e) {
+    canvas.addEventListener('mousemove', mousemove, false);
+
+    function mousemove(e){
         if (currentScreen == 1) {
             if (IsHolding) {
                 IsHoldingCurrentAltitude = GetAltitudeByRealY(e.layerY);
-                egg.CurrentLandingPlace.Place.Pull(IsHoldingStartAltitude, IsHoldingCurrentAltitude);
+                egg.CurrentLandingPlace.Place.Pull(IsHoldingStartAltitude, IsHoldingCurrentAltitude, IsHoldingCurrentLatitude, e.layerX, gameDashboardSize);
+                directionDots.change(egg.CurrentLandingPlace, egg.CurrentLandingPlace.Place.Altitude, egg.CurrentLandingPlace.Place.InclinationRadians);
             }
         }
-    }, false);
+    }
 
-    canvas.addEventListener('mouseup', function (e) {
+    canvas.addEventListener('mouseup', mouseup, false);
+
+    function mouseup() {
         if (currentScreen == 1) {
             IsHolding = false;
             egg.CurrentLandingPlace.Place.Release();
+            directionDots.release();
         }
-    }, false);
+    }
 
-    canvas.addEventListener('click', function (e) {
+    canvas.addEventListener('click', click, false);
 
+    canvas.addEventListener("touchstart", mousedown, false);
+    canvas.addEventListener("touchmove", mousemove, false);
+    canvas.addEventListener("touchend", mouseup, false);
+    //canvas.addEventListener("touchcancel", touchCancel, false)
+
+    function click(e){
 
         if (isPaused && !isSnnaped) {
             isPaused = false;
         } else if (menuScreen.showMenu) {
 
             newGame();
+
             currentScreen = 1;
 
         } else if (gameOverScreen.showScreen) {
@@ -227,14 +273,21 @@ function Game() {
             gameOverScreen.hide();
             currentScreen = 1;
         }
-    }, false);
+
+    }
+
 
     document.onkeyup = function (e) {
         if (e.keyCode == 32) { // espaço
-            // TODO insert here the possibility to make the egg jump just pressing this key
+
+
+
         }
 
     };
+
+
+
 
     loader.start();
 
@@ -257,7 +310,10 @@ function Game() {
 
     }, 500);
 
-    update();
+
+
+
+    update();//StartFPS();
 
 }
 
@@ -274,6 +330,12 @@ function newGame() {
     firstAltitude = CameraAltitudeReal + 20;
 
     menuScreen.showMenu = false;
+    wind.Speed = 0;
+
+    var soundBump = new Audio("sounds/bump.wav");
+    var nestLanding = new Audio("sounds/land.wav");
+    var stretchSound = new Audio("sounds/stretch.wav");
+
     GenerateNests(firstAltitude, true);
 
     ChangeCameraPosition(firstAltitude - 26, true);
@@ -298,6 +360,8 @@ function continueGame(_firstAltitude, _nextAltitude) {
 }
 
 function update() {
+
+    requestAnimationFrame(update);
 
     if (triggerBugFPS == false)
         triggerBugFPS = true;
@@ -329,6 +393,7 @@ function update() {
                     GenerateNests(nextAltitude, false);
                 }
 
+
                 if (newCameraAltitude != CameraAltitudeReal) {
                     var distance = newCameraAltitude - CameraAltitudeReal;
                     distance *= 0.04;
@@ -337,6 +402,9 @@ function update() {
                 } else {
                     isCameraAnimating = 0;
                 }
+
+                wind.update();
+                flakeControl.update();
 
                 deepControl.update();
 
@@ -350,7 +418,7 @@ function update() {
 
                     case 1:// Gameplay
 
-                        egg.update();
+                        egg.update(userInfo, gameOverScreen, listLandingPlaces, wind);
 
                         for (var i = 0; i < listLandingPlaces.length; i++) {
                             if (listLandingPlaces[i].Place.Altitude < CameraAltitudeReal + 25) {
@@ -365,11 +433,13 @@ function update() {
                         break;
                 }
 
-                if (userPoints != userPointsScreen) {
-                    var distance = userPoints - userPointsScreen;
+                if (userInfo.Points != userPointsScreen) {
+                    var distance = userInfo.Points - userPointsScreen;
                     distance *= 0.1;
                     userPointsScreen += distance;
                 }
+
+                directionDots.update();
 
                 gameOverScreen.update();
 
@@ -382,6 +452,7 @@ function update() {
             else if (!isPaused && isPausedOpacity > 0)
                 isPausedOpacity -= 0.05;
 
+            //Deixar sempre no final
             draw();
         }
 
@@ -389,18 +460,34 @@ function update() {
 
     }
 
-    setTimeout(update, 1000 / fpsStandard);
+    //setTimeout(update, 1000 / fpsStandard);
+
 
 }
 
+
+
 function draw() {
+
+
 
     ctx.fillStyle = "#a2c9ea";
     ctx.fillStyle = "black";
     ctx.fillRect(0, 0, document.documentElement.offsetWidth, document.documentElement.offsetHeight);
 
     deepControl.draw(ctx);
-    
+
+    // Código onde mostra o campo do jogo
+    //ctx.save();
+    //ctx.globalAlpha = 0.1;
+    //ctx.fillStyle = "black";
+    //ctx.fillRect(gameDashboardPosition.X, gameDashboardPosition.Y, gameDashboardSize.Width, gameDashboardSize.Height);
+    //ctx.restore();
+
+
+    flakeControl.draw(ctx);
+
+
     if (currentScreen == 1) {
         for (var i = 0; i < listLandingPlaces.length; i++) {
             listLandingPlaces[i].Place.draw(ctx, 0);
@@ -445,11 +532,15 @@ function draw() {
         ctx.fillStyle = "black";
         ctx.font = gameDashboardSize.Height * 0.04 + "px Segoe UI";
 
-        ctx.fillText("Pontos: " + Math.round(userPointsScreen), gameDashboardPosition.X, gameDashboardSize.Height * 0.04);
+        ctx.fillText("Points: " + Math.round(userPointsScreen), gameDashboardPosition.X, gameDashboardSize.Height * 0.04);
+
+
+        wind.draw(ctx);
+
         ctx.restore();
     }
 
-
+    directionDots.draw(ctx);
 
     menuScreen.draw(ctx);
     gameOverScreen.draw(ctx);
@@ -473,7 +564,12 @@ function draw() {
         ctx.fillText("Paused", pauseText.X, pauseText.Y);
         ctx.restore();
     }
-    
+    // Deixe sempre embaixo o seguinte código de draw
+    /*
+    ctx.fillStyle = "black";
+    ctx.font = "30px Segoe UI";
+    ctx.fillText(fpsValue, 10, document.documentElement.offsetHeight);
+    */
 }
 
 function GenerateNests(_staringAltitude, _firstGen) {
@@ -482,25 +578,29 @@ function GenerateNests(_staringAltitude, _firstGen) {
     var nextMustHighSpeed = false;
     var maxDistanceBetween = 0;
     var minDistanceBetween = 0;
+    var speedLimite = 0;
 
-    if (_staringAltitude - firstAltitude < 300) {
-        maxDistanceBetween = 25;
+    if (_staringAltitude - firstAltitude < 700) {
+        speedLimite = 0;
     }
-    else if (_staringAltitude - firstAltitude < 500) {
-        maxDistanceBetween = 35;
+    else if (_staringAltitude - firstAltitude < 1200) {
+        speedLimite = 5;
     }
     else {
-        maxDistanceBetween = 40;
+        speedLimite = 15; // a velocidade máxima de um nest é 20
     }
 
     if (_staringAltitude - firstAltitude < 300) {
+        minDistanceBetween = 10;
+        maxDistanceBetween = 15;
+    }
+    else if (_staringAltitude - firstAltitude < 500) {
+        maxDistanceBetween = 20;
         minDistanceBetween = 15;
     }
-    else if (_staringAltitude - firstAltitude < 500) {
-        minDistanceBetween = 25;
-    }
     else {
-        minDistanceBetween = 35;
+        maxDistanceBetween = 30;
+        minDistanceBetween = 20;
     }
 
     if (listLandingPlaces != null) {
@@ -509,8 +609,10 @@ function GenerateNests(_staringAltitude, _firstGen) {
 
     for (var i = numberExistingLandingPlaces; i < numberExistingLandingPlaces + 10; i++) {
 
-        var newNestLatitude = Math.random() * 100;
-        var newNestSpeed = Math.random() * 20;
+        var newNestSpeed = 0;
+        if ((Math.random() * 3) > 2) {
+            newNestSpeed = Math.random() * speedLimite;
+        }
         var newNestFirstDirection = Math.random();
 
 
@@ -527,7 +629,12 @@ function GenerateNests(_staringAltitude, _firstGen) {
                 newNestAltitude += nextAltitude;
 
                 altitudeNotReady = false;
+
+
             }
+
+
+
         }
 
         if (i == 0 && _firstGen) {
@@ -535,25 +642,25 @@ function GenerateNests(_staringAltitude, _firstGen) {
             _firstGen = false;
 
         }
-
-        if (_staringAltitude == 0 && i == 0) {
-
-            //newNestSpeed = 5;
-        }
-
-        if (nextMustHighSpeed) {
-            newNestSpeed += 10;
-            nextMustHighSpeed = false;
-
-            if (newNestSpeed > 20)
-                newNestSpeed = 20;
-        } else if (newNestSpeed < 3) {
-            nextMustHighSpeed = true;
-        }
-
+        /*
+                   if (_staringAltitude == 0 && i== 0) {
+                       
+                       //newNestSpeed = 5;
+                   }
+                  
+                   if (nextMustHighSpeed) {
+                       newNestSpeed += 10;
+                       nextMustHighSpeed = false;
+       
+                       if (newNestSpeed > 20)
+                           newNestSpeed = 20;
+                   } else if (newNestSpeed < 3) {
+                       nextMustHighSpeed = true;
+                   }
+                   */
         nextAltitude = newNestAltitude;
 
-        listLandingPlaces[i] = new LandingPlace(1, newNestAltitude, newNestLatitude, 0, newNestSpeed, newNestFirstDirection);
+        listLandingPlaces[i] = new LandingPlace(egg, 1, newNestAltitude, 0, newNestSpeed, newNestFirstDirection, nestLanding, stretchSound);
 
         listLandingPlaces[i].Place.ImgNestFront = _storeNest1.ImgNestFront;
         listLandingPlaces[i].Place.ImgNestBack = _storeNest1.ImgNestBack;
@@ -563,36 +670,7 @@ function GenerateNests(_staringAltitude, _firstGen) {
     forceResize = true;
 }
 
-function GetAltitudeY(_altitude) {
-    /// <summary>Converte a altitude real do objeto a partir da camera.</summary>
-    var currentConvertedCameraAltitude = CameraAltitudeReal * document.documentElement.offsetHeight / 100;
-    var currentConvertedObjectAltitude = _altitude * document.documentElement.offsetHeight / 100;
-    return currentConvertedCameraAltitude - currentConvertedObjectAltitude;
-}
 
-function GetLatitude(_latitude) {
-    return gameDashboardPosition.X + (_latitude * (gameDashboardSize.Width / 100));
-}
-
-function GetAltitudeByRealY(_altitude) {
-    var currentConvertedObjectAltitude = _altitude * 100 / document.documentElement.offsetHeight;
-
-    return (CameraAltitudeVirtual - currentConvertedObjectAltitude) + 100;
-}
-
-
-function ChangeCameraPosition(_newAltitude, animation) {
-    
-    if (animation)
-        newCameraAltitude = _newAltitude + 100; // Por ficar no meio da tela, vem do +50.
-    else {
-        newCameraAltitude = _newAltitude + 100;
-        CameraAltitudeReal = _newAltitude + 100;
-    }
-
-    CameraAltitudeVirtual = _newAltitude;
-
-}
 
 function resize() {
 
@@ -625,662 +703,5 @@ function resize() {
     }
 }
 
-/****************************** Screens ********************************/
-function MenuScreen() {
-    this.menuLogoImage = new Image();
-    this.showMenuOpacity = 0;
-    this.showMenu = true;
-    this.menuLogoPosition = new Vector2(0, 0);
-    this.menuLogoSize = new Size(1, 1);
 
-    this.btPlayImage = new Image();
-    this.menuBtPlayPosition = new Vector2(0, 0);
-    this.menuBtPlaySize = new Size(1, 1);
 
-
-    this.resize = function (_canvas) {
-        this.menuLogoSize.height = GetResolutionHeight(this.menuLogoImage.height);
-        this.menuLogoSize.width = GetResolutionWidth(this.menuLogoImage.width, this.menuLogoImage.height, this.menuLogoSize.height);
-        this.menuLogoPosition.X = (document.documentElement.offsetWidth / 2) - (this.menuLogoSize.width / 2);
-        this.menuLogoPosition.Y = document.documentElement.offsetHeight * 0.05;
-
-        this.menuBtPlaySize.height = GetResolutionHeight(this.btPlayImage.height);
-        this.menuBtPlaySize.width = GetResolutionWidth(this.btPlayImage.width, this.btPlayImage.height, this.menuBtPlaySize.height);
-        this.menuBtPlayPosition.X = (document.documentElement.offsetWidth / 2) - (this.menuBtPlaySize.width / 2);
-        this.menuBtPlayPosition.Y = document.documentElement.offsetHeight * 0.68;
-    }
-
-    this.update = function () {
-        if (!this.showMenu && this.showMenuOpacity > 0) {
-            this.showMenuOpacity *= 0.9;
-            if (this.showMenuOpacity < 0) {
-                this.showMenuOpacity = 0;
-            }
-
-        } else if (this.showMenu && this.showMenuOpacity < 1) {
-            this.showMenuOpacity += 0.05;
-            if (this.showMenuOpacity > 1) {
-                this.showMenuOpacity = 1;
-            }
-
-        }
-        if (this.showMenu) {
-
-            ChangeCameraPosition(CameraAltitudeVirtual + (10 * deltaTime), false);
-        }
-    }
-
-    this.draw = function (_ctx) {
-        if (this.showMenuOpacity > 0) {
-            //var currentMenuHeight = GetResolutionHeight(menuImage.height);
-            //var currentMenuWidth = GetResolutionWidth(menuImage.width,
-            _ctx.save();
-            _ctx.globalAlpha = this.showMenuOpacity;
-            _ctx.drawImage(this.menuLogoImage, this.menuLogoPosition.X, this.menuLogoPosition.Y, this.menuLogoSize.width, this.menuLogoSize.height);
-            _ctx.drawImage(this.btPlayImage, this.menuBtPlayPosition.X, this.menuBtPlayPosition.Y, this.menuBtPlaySize.width, this.menuBtPlaySize.height);
-
-            _ctx.restore();
-        }
-
-    }
-}
-
-function GameoverScreen() {
-    this.btPlayAgainImage = new Image();
-    this.btPlayAgainPosition = new Vector2(0, 0);
-    this.btPlayAgainSize = new Size(1, 1);
-
-    this.figEggDestroiedImage = new Image();
-    this.figEggDestroiedPosition = new Vector2();
-    this.figEggDestroiedSize = new Size();
-
-    this.points = 0;
-    this.highestPoints = 0;
-
-    this.screenOpacity = 0;
-    var newScreenOpacity = 0;
-    this.showScreen = false;
-
-    var gameOverTextPosition = new Vector2(0, 0),
-        label1 = new Vector2(0, 0),
-        label2 = new Vector2(0, 0),
-        label3 = new Vector2(0, 0),
-        label4 = new Vector2(0, 0);
-
-    this.draw = function (_ctx) {
-
-        if (this.screenOpacity > 0) {
-            _ctx.save()
-
-            _ctx.globalAlpha = this.screenOpacity;
-
-            _ctx.fillStyle = "white";
-            _ctx.font = gameDashboardSize.Height * 0.1 + "px Segoe UI";
-            _ctx.fillText("Game Over", gameOverTextPosition.X, gameOverTextPosition.Y);
-
-            _ctx.font = gameDashboardSize.Height * 0.028 + "px Segoe UI";
-            _ctx.fillText("Your score:", label1.X, label1.Y);
-            _ctx.fillText("Your highest score:", label3.X, label3.Y);
-
-            _ctx.font = gameDashboardSize.Height * 0.055 + "px Segoe UI";
-            _ctx.fillText(this.points + " Points", label2.X, label2.Y);
-
-            _ctx.font = gameDashboardSize.Height * 0.055 + "px Segoe UI";
-            _ctx.fillText(this.highestPoints + " Points", label4.X, label4.Y);
-
-            _ctx.drawImage(this.btPlayAgainImage, this.btPlayAgainPosition.X, this.btPlayAgainPosition.Y, this.btPlayAgainSize.Width, this.btPlayAgainSize.Height);
-            _ctx.drawImage(this.figEggDestroiedImage, this.figEggDestroiedPosition.X, this.figEggDestroiedPosition.Y, this.figEggDestroiedSize.Width, this.figEggDestroiedSize.Height);
-
-            _ctx.restore();
-        }
-
-    }
-
-    this.update = function () {
-
-        if (newScreenOpacity != this.screenOpacity) {
-            var distance = newScreenOpacity - this.screenOpacity;
-            distance *= 0.1;
-            this.screenOpacity = this.screenOpacity + distance;
-        }
-
-        if (this.screenOpacity >= 0.9 && this.showScreen) {
-            currentScreen = 2;
-        }
-
-    }
-
-    this.resize = function (_ctx) {
-        _ctx.save();
-
-        _ctx.font = gameDashboardSize.Height * 0.1 + "px Segoe UI";
-        gameOverTextPosition.X = (document.documentElement.offsetWidth / 2) - (_ctx.measureText("Game Over").width / 2);
-        gameOverTextPosition.Y = document.documentElement.offsetHeight * 0.12;
-
-        _ctx.font = gameDashboardSize.Height * 0.028 + "px Segoe UI";
-        label1.X = gameDashboardPosition.X + (gameDashboardSize.Width * 0.15);
-        label1.Y = gameDashboardSize.Height * 0.2;
-        label3.X = gameDashboardPosition.X + (gameDashboardSize.Width * 0.15);
-        label3.Y = gameDashboardSize.Height * 0.38;
-
-        _ctx.font = gameDashboardSize.Height * 0.05 + "px Segoe UI";
-        label2.X = gameDashboardPosition.X + (gameDashboardSize.Width * 0.15);
-        label2.Y = gameDashboardSize.Height * 0.275;
-        label4.X = gameDashboardPosition.X + (gameDashboardSize.Width * 0.15);
-        label4.Y = gameDashboardSize.Height * 0.46;
-
-        this.btPlayAgainSize.Height = GetResolutionHeight(this.btPlayAgainImage.height);
-        this.btPlayAgainSize.Width = GetResolutionWidth(this.btPlayAgainImage.width, this.btPlayAgainImage.height, this.btPlayAgainSize.Height);
-        this.btPlayAgainPosition.X = (document.documentElement.offsetWidth / 2) - (this.btPlayAgainSize.Width / 2);
-        this.btPlayAgainPosition.Y = document.documentElement.offsetHeight * 0.52;
-
-        this.figEggDestroiedSize.Height = GetResolutionHeight(this.figEggDestroiedImage.height);
-        this.figEggDestroiedSize.Width = GetResolutionWidth(this.figEggDestroiedImage.width, this.figEggDestroiedImage.height, this.figEggDestroiedSize.Height);
-        this.figEggDestroiedPosition.X = (document.documentElement.offsetWidth / 2) - (this.figEggDestroiedSize.Width / 2);
-        this.figEggDestroiedPosition.Y = document.documentElement.offsetHeight * 0.68;
-
-        _ctx.restore();
-    }
-
-    this.show = function () {
-        this.showScreen = true;
-        newScreenOpacity = 1;
-    }
-    this.hide = function () {
-        newScreenOpacity = 0;
-        this.showScreen = false;
-    }
-}
-
-/****************************** Objetos ********************************/
-function Egg() {
-    var forceAltitude = 0;
-    var forceLatitude = 0;
-    var currentOrder; // Ordem de draw na tela
-    var latitudeAnimation = 0;
-    var altitudeAnimation = 0;
-    var rotationReaction = false;// controla a animação de reação do ovo, quando cai no ninho
-    var followCamera = false;
-    var followCameraDifference = 0;
-    var followCameraStopFollow = 0;
-    var lastAltitude;
-
-
-    this.ImgEgg = new Image();
-    this.Altitude;
-    this.Latitude = 0;
-    this.CurrentLandingPlace = null;
-    this.IsJumping = false;
-    this.Rotation = 0;
-    this.RotationForce = 0;
-
-    this.Position = new Vector2(0, 0);
-    this.Size = new Size(50, 50);
-
-    this.Jump = function (_altitudeSpeed) {
-        if (!this.IsJumping) {
-            forceAltitude = _altitudeSpeed;
-            this.IsJumping = true;
-            this.RotationForce = this.CurrentLandingPlace.Place.LatitudeForce * 0.008;
-
-            soundBump.play();
-        }
-    }
-
-    this.ChangePosition = function (_latitude, _altitude, _animated) {
-        if (_animated) {
-            latitudeAnimation = this.Latitude - _latitude;
-            altitudeAnimation = this.Altitude - _altitude;
-            this.Latitude = _latitude;
-            this.Altitude = _altitude;
-
-
-        } else {
-            this.Latitude = _latitude;
-            this.Altitude = _altitude;
-        }
-    }
-
-    this.update = function () {
-
-        this.Position.X = GetLatitude(this.Latitude);
-        this.Position.Y = GetAltitudeY(this.Altitude);
-
-        if (this.IsJumping) {
-
-            var newForceAltitude = forceAltitude * deltaTime;
-
-            this.Altitude += newForceAltitude;
-            forceAltitude -= 200 * deltaTime;
-
-            if (forceAltitude < 0) {
-                var sizeCenter = new Size(1, 1);
-                for (var i = 0; i < listLandingPlaces.length; i++) {
-
-                    if (listLandingPlaces[i].Intersects(this.Position, this.Size) && // Se intersectar o ninho...
-                        newForceAltitude < -2.3 && // não deixa o ovo cair no ninho se ele tive muito baixo. Padrao -0.7.
-                        (this.Altitude - newForceAltitude) > this.CurrentLandingPlace.Place.Altitude &&
-                        listLandingPlaces[i].Place.Altitude > this.CurrentLandingPlace.Place.Altitude) // Não permite voltar ao mesmo ninho ou para os de baixo.
-                    {
-                        // Então pouso autorizado!
-
-                        this.CurrentLandingPlace = listLandingPlaces[i];
-                        this.IsJumping = false;
-
-                        var latitudeDistance = this.Latitude - (listLandingPlaces[i].Place.Latitude + listLandingPlaces[i].CenterLatitude);
-                        var _newRotationForce = latitudeDistance * 0.03;
-
-                        this.RotationForce = _newRotationForce * -1;
-
-                        listLandingPlaces[i].Place.Recieved();
-
-                        this.ChangePosition(listLandingPlaces[i].Place.Latitude + listLandingPlaces[i].CenterLatitude, listLandingPlaces[i].Place.Altitude, true);
-                        ChangeCameraPosition(listLandingPlaces[i].Place.Altitude - 26, true);
-                        userPoints = Math.round(listLandingPlaces[i].Place.Altitude - firstAltitude);
-                        rotationReaction = true;
-
-                        nestLanding.play();
-
-                    }
-                }
-            }
-
-            // codigo que espera o ovo de afastar do ovo, para aplicar o efeito de profundidade do nest/egg
-            if ((this.Altitude - this.CurrentLandingPlace.Place.Altitude) > 5 || forceAltitude < 1) {
-                currentOrder = 1;
-            } else {
-                currentOrder = 0;
-            }
-
-        }
-
-        if (!this.IsJumping) {
-
-            this.Altitude = (this.CurrentLandingPlace.Place.Altitude + this.CurrentLandingPlace.CenterAltitude) + altitudeAnimation;
-            this.Latitude = (this.CurrentLandingPlace.Place.Latitude + this.CurrentLandingPlace.CenterLatitude) + latitudeAnimation;
-            latitudeAnimation *= 0.0150 / deltaTime; // 0.8
-            altitudeAnimation *= 0.0150 / deltaTime; // 0.7;
-            this.RotationForce *= 0.8;
-
-            currentOrder = 0
-        }
-
-        var distanceCameraLandPosition = 26;
-
-        if (
-            this.Altitude >= (this.CurrentLandingPlace.Place.Altitude - 130) 
-        ) {
-            ChangeCameraPosition(this.Altitude - distanceCameraLandPosition, true);
-
-            if (!gameOverScreen.showScreen && this.CurrentLandingPlace.Place.Altitude - this.Altitude > 100) {
-                gameOverScreen.points = userPoints;
-
-
-                var applicationData = Windows.Storage.ApplicationData.current;
-
-                var recordScore;
-                recordScore = applicationData.localSettings.values["highScore"];
-                recordScore = parseInt(recordScore);
-                gameOverScreen.highestPoints = recordScore;
-
-                if (recordScore == undefined || isNaN(recordScore)) {
-                    recordScore = 0;
-                }
-
-                if (userPoints > recordScore) {
-                   
-                    applicationData.localSettings.values["highScore"] = userPoints;
-                    gameOverScreen.highestPoints = userPoints;
-                }
-
-                gameOverScreen.show();
-
-                userPoints = 0;
-            }
-        }
-
-        lastAltitude = this.Altitude
-
-        this.Rotation += this.RotationForce;
-
-
-    }
-
-    this.draw = function (_ctx, _order) {
-        if (currentOrder == _order && this.CurrentLandingPlace != null) {
-
-            var _eggHalfWidth = this.Size.Width / 2;
-            var _eggHalfHeight = this.Size.Height / 2;
-            _ctx.save();;
-            _ctx.translate(this.Position.X + _eggHalfWidth, this.Position.Y + _eggHalfHeight);
-            _ctx.rotate(this.Rotation);
-            _ctx.drawImage(this.ImgEgg, -_eggHalfWidth, -_eggHalfHeight, this.Size.Width, this.Size.Height);
-            _ctx.restore();
-
-        }
-    }
-}
-
-
-function Nest(_type, _altitude, _latitude, _altitudeSpeed, _latitudeSpeed, _firstDirection, _marginLeft, _marginRight, _marginTop, _marginBottom) {
-
-    var marginLeft = 0;
-    var marginRight = 0;
-    var newAltitudeForce = 0;
-    var newLatitudeForce = 0;
-    var altitudeForce = 0;
-    var latitudeForce = 0;
-    var latitudeNestWidth = 29; // Número que é a largura do Nest em "Latitude"
-    var isHolding = false;
-    var realAltitude = _altitude;
-    var plusAltitude = 0;
-    var animationHit = 0;//Animação quando um ovo bate no ninho
-    var animationHitAltitude = 0;
-    var isAnimationHit = false;
-
-    this.Position = new Vector2(0, 0);
-    this.Size = new Size(100, 100);
-    this.PositionCollision = new Vector2(0, 0);
-    this.SizeCollision = new Size(100, 100);
-    this.Type = _type;
-    this.ImgNestFront = new Image();
-    this.ImgNestBack = new Image();
-    this.RelativePosition = new Vector2(0, 0);
-    this.Altitude = _altitude;
-    this.AltitudeStandard = this.Altitude; // Necessário para que a camera saiba onde deve focalizar
-    this.Latitude = 0;
-    this.IsMoving = true;
-    this.LatitudeSpeed = 20; // É muito fácil confundir latitude de altitude, cuidado!
-    this.AltitudeSpeed = 0;
-    this.LatitudeForce = 0;
-    this.CurrentDirection = _firstDirection;
-
-    // Construtor
-    this.LatitudeSpeed = _latitudeSpeed;
-    marginLeft = _latitudeSpeed / 5;
-    marginRight = 90 - latitudeNestWidth;
-    newLatitudeForce = _latitudeSpeed;
-
-    latitudeForce = _latitudeSpeed * _firstDirection;
-
-    if (_latitude < marginLeft)
-        this.Latitude = marginLeft;
-    else if (_latitude > marginRight)
-        this.Latitude = marginRight;
-    else
-        this.Latitude = _latitude;
-
-    this.Pull = function (_startAltitude, _currentAltitude) {
-
-        if (!isHolding) {
-            stretchSound.play();
-        }
-
-        isHolding = true;
-        var newPlusAltitude = _currentAltitude - _startAltitude;
-
-        if (newPlusAltitude < 0) {
-            if (newPlusAltitude > -5)
-                plusAltitude = newPlusAltitude;
-            else {
-                var plusAltitudeExc = newPlusAltitude + 5;
-                plusAltitude = -5 + (plusAltitudeExc * 0.1);
-            }
-
-        }
-    }
-    this.Release = function () {
-        isHolding = false;
-        if (egg.CurrentLandingPlace.Place == this) {
-            if (plusAltitude < -5)
-                plusAltitude = -5;
-
-            if (plusAltitude < -1) {
-                egg.Jump(plusAltitude * -30); //egg.Jump((plusAltitude -1) * 8.5);
-            }
-        }
-    }
-    this.Recieved = function () {
-        isAnimationHit = true;
-    }
-    this.draw = function (_ctx, _order) {
-        if (this.Altitude < CameraAltitudeReal + 25) {
-            _ctx.save();
-
-            var realAltitudeHitAnimationFront = 0;
-            var realAltitudeHitAnimationBack = 0;
-
-            var newFrontHeight = 0;
-
-            if (isAnimationHit) {
-                realAltitudeHitAnimationFront = GetAltitudeY(this.Altitude - animationHitAltitude);
-                realAltitudeHitAnimationBack = GetAltitudeY(this.Altitude + animationHitAltitude);
-
-                newFrontHeight = (realAltitudeHitAnimationFront - this.Position.Y) * 0.5;
-            }
-
-            switch (_order) {
-                case 0:
-                    if (!isAnimationHit)
-                        _ctx.drawImage(this.ImgNestBack, this.Position.X, GetAltitudeY(this.Altitude), this.Size.Width, this.Size.Height);
-                    else
-                        _ctx.drawImage(this.ImgNestBack, this.Position.X, realAltitudeHitAnimationBack, this.Size.Width, this.Size.Height);
-
-                    break;
-                case 1:
-                    if (!isAnimationHit)
-                        _ctx.drawImage(this.ImgNestFront, this.Position.X, GetAltitudeY(this.Altitude), this.Size.Width, this.Size.Height);
-                    else
-                        _ctx.drawImage(this.ImgNestFront, this.Position.X, realAltitudeHitAnimationFront, this.Size.Width, this.Size.Height - newFrontHeight);
-
-                    break;
-            }
-
-            _ctx.restore();
-
-        }
-    }
-
-    this.update = function () {
-
-        this.Altitude = realAltitude + plusAltitude;
-
-        if (plusAltitude != 0 && !isHolding) {
-            plusAltitude *= 0.5;
-
-        }
-
-
-        if (this.IsMoving) {
-
-            if (this.Latitude >= marginRight && newLatitudeForce > 0 ||
-                this.Latitude <= marginLeft && newLatitudeForce < 0) {
-                newLatitudeForce *= -1;
-
-                if (newLatitudeForce < 0)
-                    this.CurrentDirection = -1;
-                else
-                    this.CurrentDirection = 1;
-
-            }
-
-            if (newLatitudeForce != latitudeForce) {
-                var distance = newLatitudeForce - latitudeForce;
-                distance *= 0.1;// (0.9 * deltaTime);
-                latitudeForce = latitudeForce + distance;
-            }
-
-            this.Latitude = this.Latitude + (latitudeForce * deltaTime);
-            this.Position.X = GetLatitude(this.Latitude); //- GetLatitude(72); ;
-
-            this.LatitudeForce = latitudeForce;
-
-        }
-
-        if (isAnimationHit) {
-            animationHit += 12 * deltaTime;
-            animationHitAltitude = Math.sin(animationHit);
-            animationHitAltitude *= 0.5;
-
-            if (animationHit >= Math.PI) {
-                isAnimationHit = false;
-                animationHitAltitude = 0;
-                animationHit = 0;
-            }
-        }
-
-        var _x = this.Position.X + CameraSpecialPosition.X;
-        var _y = GetAltitudeY(this.Altitude);// + CameraSpecialPosition.Y;
-        this.Position = new Vector2(_x, _y);
-
-        // código que mostra qual é a area de coliso
-        this.PositionCollision = new Vector2(this.Position.X + (this.Size.Width * 0.32), this.Position.Y + (this.Size.Height * 0.2));
-        this.SizeCollision = new Size(this.Size.Width * 0.35, this.Size.Height * 0.1);
-    }
-
-}
-
-function DeepControl() {
-
-    var heightInAltitude = 120;
-    var altitude1 = 0;
-    var altitude2 = heightInAltitude;
-
-    this.RoofImage = new Image();
-    this.RoofPosition = new Vector2(0, 0);
-    this.RoofAltitute = 0;
-    this.RoofSize = new Size(0, 0);
-
-    this.resize = function () {
-        //heightInAltitude = GetAltitudeByRealY(this.RoofImage.height);
-    }
-
-    this.update = function () {
-        //this.RoofPosition.Y = (GetAltitudeY(this.RoofAltitute) - this.RoofSize.Height) + CameraSpecialPosition.Y;
-
-        // Controle das imagens que vão para cima
-
-        this.RoofPosition.X = ((document.documentElement.offsetWidth / 2) - (this.RoofSize.Width / 2)) + CameraSpecialPosition.X;
-
-        if (altitude1 + heightInAltitude <= CameraAltitudeReal - 100) {
-            altitude1 = altitude2 + heightInAltitude;
-        } else if (altitude2 + heightInAltitude <= CameraAltitudeReal - 100) {
-            altitude2 = altitude1 + heightInAltitude;
-
-            // Controle das imagens que vão para baixo
-
-        } else if (altitude1 > CameraAltitudeReal - 100 && altitude2 > CameraAltitudeReal - 100) {
-            if (altitude1 < altitude2)
-                altitude2 = altitude1 - heightInAltitude;
-            else
-                altitude1 = altitude2 - heightInAltitude;
-        }
-
-        //else if (altitude2 - heightInAltitude >= CameraAltitudeVirtual - 30) {
-        //    altitude2 = altitude1 - heightInAltitude;
-        //}
-
-    };
-    this.draw = function (_ctx) {
-        _ctx.drawImage(this.RoofImage, this.RoofPosition.X, GetAltitudeY(altitude1 + heightInAltitude), this.RoofSize.Width, this.RoofSize.Height + 1);
-        _ctx.drawImage(this.RoofImage, this.RoofPosition.X, GetAltitudeY(altitude2 + heightInAltitude), this.RoofSize.Width, this.RoofSize.Height + 1);
-    };
-}
-
-function LandingPlace(_placeType, _altitude, _latitude, _altitudeSpeed, _latitudeSpeed, _firstDirection) {
-    this.ID = 0;
-    this.Place = null;
-
-    this.ID = _placeType;
-    this.CenterLatitude = 0; // Local de diferença exato onde o ovo vai pousar
-    this.CenterAltitude = 0; // Local de diferença exato onde o ovo vai pousar
-    this.IsToDelete = false;
-    this.IsToLand = true;
-
-    switch (_placeType) {
-        case 1: // Ovo normal
-            this.Place = new Nest(1, _altitude, _latitude, _altitudeSpeed, _latitudeSpeed, _firstDirection);
-            this.CenterLatitude = 12;
-            this.CenterAltitude = 1;
-            break;
-    }
-
-    this.Intersects = function (_positon, _size) {
-        var _landPosition = this.Place.PositionCollision;
-        var _landSize = this.Place.SizeCollision;
-
-        return CollisionDetect(_positon.X, _positon.Y, _size.Height, _size.Width,
-            _landPosition.X, _landPosition.Y, _landSize.Height, _landSize.Width);
-    }
-
-    this.update = function () {
-
-        this.Place.update();
-
-        if (this.Place.Altitude < (CameraAltitudeReal - 100)) {
-            this.IsToDelete = true;
-        }
-
-
-    }
-
-
-
-    // por causa de bug, não foi possível adicionar os membros filhos.
-    // Todo objeto Place tem que ter as seguintes propriedades e métodos: Size, Position, AltitudeForce, Draw, Update, PositionCollision, SizeCollision
-
-}
-
-/***************************** Architure *******************************/
-
-// Controle de FPS e DeltaTime
-var lastTime = 0;
-var fps = 0;
-var fpsStandard = 60;
-var fpsValue = 0;
-var deltaTime;
-
-function CollisionDetect(orignX, orignY, destinX, destinY) {
-    return CollisionDetect(orignX, orignY, 1, 1, destinX, destinY, 1, 1)
-}
-
-function CollisionDetect(orignX, orignY, orignHeight, orignWidth,
-    destinX, destinY, destinHeight, destinWidth) {
-
-    var left1 = orignX, left2 = destinX,
-        right1 = orignX + orignWidth, right2 = destinX + destinWidth,
-        top1 = orignY, top2 = destinY,
-        bottom1 = orignY + orignHeight, bottom2 = destinY + destinHeight;
-
-    if (bottom1 < top2) return (0);
-    if (top1 > bottom2) return (0);
-
-    if (right1 < left2) return (0);
-    if (left1 > right2) return (0);
-
-    return 1;
-
-
-}
-
-function Vector2(_x, _y) {
-    /// <summary>Posição X e Y.</summary>
-    this.X = _x;
-    this.Y = _y;
-}
-
-function Size(_width, _height) {
-    /// <summary>Posição X e Y.</summary>
-    this.Width = _width;
-    this.Height = _height;
-}
-
-function GetResolutionHeight(_height) {
-    /// <summary>Retorna um valor de altura a partir de um valor padrao de altura. O 1000 é como se fosse a lente.</summary>
-    return (_height / 1000) * document.documentElement.offsetHeight;
-}
-
-function GetResolutionWidth(_width, _oldHeight, _newHeight) {
-    /// <summary>Retorna o valor de largura a partir do valor de altura. Ele mantem a resolução da imagem.</summary>
-    return (_newHeight / _oldHeight) * _width;
-}
