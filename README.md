@@ -2,7 +2,7 @@
 
 A very old game made by me in 2012 (college times) only using the "new", in that time, HTML tag Canvas and pure JavaScript
 
-![alt tag](https://github.com/Liques/EggJumpHTML5Game/raw/master/example.PNG)
+![screen](example.PNG)
 
 This game is very simple: The just have to reach the highest level possible dropping an egg from a nest over one over it.
 
